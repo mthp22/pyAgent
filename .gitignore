@@ -1,0 +1,7 @@
+venv/
+chat_sessions/
+.venv/
+.pycache/
+__pycache__/
+path/
+.env/
