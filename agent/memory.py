@@ -2,15 +2,10 @@ import os
 import time
 import uuid
 
-from agent.config import CHAT_SESSIONS_DIR
-
 class Memory:
-    def __init__(self, chat_id: str = None):
-        if not os.path.exists(CHAT_SESSIONS_DIR):
-            os.makedirs(CHAT_SESSIONS_DIR)
-            
-        self.chat_id = chat_id or str(uuid.uuid4())
-        self.chat_dir = os.path.join(CHAT_SESSIONS_DIR, self.chat_id)
+    def __init__(self, chat_id: str, workspace_dir: str):
+        self.chat_id = chat_id
+        self.chat_dir = workspace_dir
         
         if not os.path.exists(self.chat_dir):
             os.makedirs(self.chat_dir)

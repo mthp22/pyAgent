@@ -2,46 +2,52 @@ import os
 import subprocess
 import shlex
 import re
-from agent.config import ALLOWED_COMMANDS, DANGEROUS_FLAGS, COMMAND_TIMEOUT, WORKSPACE_DIR
+from agent.config import ALLOWED_COMMANDS, DANGEROUS_FLAGS, COMMAND_TIMEOUT
 
-def is_safe_path(path: str) -> bool:
-    """Ensure path is within workspace."""
+def get_safe_abs_path(path: str, workspace_dir: str) -> str:
+    """Resolve path against workspace_dir and ensure it is inside it."""
+    if not os.path.isabs(path):
+        path = os.path.join(workspace_dir, path)
     abs_path = os.path.abspath(path)
-    # Allows read/write only inside the workspace
-    return abs_path.startswith(os.path.abspath(WORKSPACE_DIR))
+    if not abs_path.startswith(os.path.abspath(workspace_dir)):
+        return None
+    return abs_path
 
-def read_file(path: str) -> str:
-    if not is_safe_path(path):
+def read_file(path: str, workspace_dir: str) -> str:
+    safe_path = get_safe_abs_path(path, workspace_dir)
+    if not safe_path:
         return f"Error: Path {path} is outside allowed workspace."
     try:
-        with open(path, 'r') as f:
+        with open(safe_path, 'r') as f:
             return f.read()
     except Exception as e:
         return f"Error reading file: {e}"
 
-def write_file(path: str, content: str) -> str:
-    if not is_safe_path(path):
+def write_file(path: str, content: str, workspace_dir: str) -> str:
+    safe_path = get_safe_abs_path(path, workspace_dir)
+    if not safe_path:
         return f"Error: Path {path} is outside allowed workspace."
     try:
         # Create directories if they don't exist
-        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-        with open(path, 'w') as f:
+        os.makedirs(os.path.dirname(safe_path), exist_ok=True)
+        with open(safe_path, 'w') as f:
             f.write(content)
-        return f"Successfully wrote to {path}"
+        return f"Successfully wrote to {safe_path}"
     except Exception as e:
         return f"Error writing file: {e}"
 
-def edit_file(path: str, patch: str) -> str:
+def edit_file(path: str, patch: str, workspace_dir: str) -> str:
     """
     Very simple diff/replacement. 
     Expects patch to be a string where it tells what to replace exactly.
     Format could be custom, e.g., REPLACE: <old> WITH: <new>
     For simplicity, let's implement a rudimentary string replacement block.
     """
-    if not is_safe_path(path):
+    safe_path = get_safe_abs_path(path, workspace_dir)
+    if not safe_path:
         return f"Error: Path {path} is outside allowed workspace."
     try:
-        with open(path, 'r') as f:
+        with open(safe_path, 'r') as f:
             content = f.read()
             
         # Simple extraction logic for the patch format
@@ -51,9 +57,9 @@ def edit_file(path: str, patch: str) -> str:
             new_str = parts[1].strip()
             if old_str in content:
                 new_content = content.replace(old_str, new_str)
-                with open(path, 'w') as f:
+                with open(safe_path, 'w') as f:
                     f.write(new_content)
-                return f"Successfully edited {path}"
+                return f"Successfully edited {safe_path}"
             else:
                 return "Error: Old string not found in file."
         else:
@@ -62,7 +68,7 @@ def edit_file(path: str, patch: str) -> str:
     except Exception as e:
         return f"Error editing file: {e}"
 
-def run_command(command: str) -> str:
+def run_command(command: str, workspace_dir: str) -> str:
     """
     Executes a shell command.
     Applies safety checks.
@@ -85,7 +91,7 @@ def run_command(command: str) -> str:
         result = subprocess.run(
             command,
             shell=True,
-            cwd=WORKSPACE_DIR,
+            cwd=workspace_dir,
             capture_output=True,
             text=True,
             timeout=COMMAND_TIMEOUT
