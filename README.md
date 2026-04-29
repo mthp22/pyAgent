@@ -31,8 +31,14 @@ Pass your goal as a quoted string to `main.py`:
 python main.py "Create a Flask app with a /hello endpoint"
 ```
 
+Continue previous chat sessions with **--start**
+
+```bash
+python main.py --start
+```
+
 The agent will textually explain its planned steps and its exact JSON-based actions it is taking.
-All actions/history are saved automatically in `chat_sessions/`.
+All actions/history are saved automatically in `Chat/`.
 
 ### Configuration
 You can edit `agent/config.py` or use environment variables:
