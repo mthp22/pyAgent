@@ -7,7 +7,8 @@ A Python-based autonomous coding agent that uses CodeLlama (via Ollama) to accep
 - Goal-based planning and iterative execution
 - Tool calling via strict JSON schema (read_file, write_file, edit_file, run_command, finish)
 - Safe execution environment (restricts arbitrary paths, dangerous commands)
-- Context management with `chat_sessions` history persistence
+- Deterministic session continuation with `current.md`, `next.md`, and `session.json`
+- Context management with persisted action history across runs
 
 ## Setup Instructions
 
@@ -31,17 +32,23 @@ Pass your goal as a quoted string to `main.py`:
 python main.py "Create a Flask app with a /hello endpoint"
 ```
 
-Continue previous chat sessions with **--start**
+Continue previous chat sessions with **-start**
 
 ```bash
-python main.py --start
+python main.py -start
 ```
 
 The agent will textually explain its planned steps and its exact JSON-based actions it is taking.
-All actions/history are saved automatically in `Chat/`.
+All actions/history are saved automatically in `Chats/`.
+
+Each chat workspace includes:
+- `plan.md`: active implementation plan
+- `current.md`: deterministic progress snapshot
+- `next.md`: deterministic immediate next steps
+- `session.json`: session metadata (goal, status, iteration/error context)
 
 ### Configuration
 You can edit `agent/config.py` or use environment variables:
 - `LLM_ENDPOINT`: Set if your Ollama endpoint differs from `http://localhost:11434/api/generate`
-- `MODEL_NAME`: Default is `codellama`.
+- `MODEL_NAME`: Default is `qwen2.5-coder:7b`.
 - `WORKSPACE_DIR`: Default is your current working directory. The agent is locked to this directory.
