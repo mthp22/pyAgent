@@ -12,7 +12,6 @@ from agent.config import (
     SLOW_COMMAND_TIMEOUT,
 )
 
-
 PATCH_BLOCK_RE = re.compile(
     r"REPLACE:\s*(.*?)\s*WITH:\s*(.*?)(?=(?:\n\s*REPLACE:)|\Z)",
     re.DOTALL,
@@ -21,17 +20,18 @@ PATCH_BLOCK_RE = re.compile(
 
 def _is_subpath(path: str, root: str) -> bool:
     try:
-        return os.path.commonpath([os.path.abspath(path), os.path.abspath(root)]) == os.path.abspath(root)
+        # realpath resolves symlinks so a link inside the workspace cannot point outside it.
+        return os.path.commonpath([os.path.realpath(path), os.path.realpath(root)]) == os.path.realpath(root)
     except ValueError:
         return False
 
 
 def get_safe_abs_path(path: str, workspace_dir: str) -> Optional[str]:
-    """Resolve path against workspace_dir and ensure it stays inside it."""
+    """Resolve path against workspace_dir and ensure it stays inside it (symlink-safe)."""
     resolved = path
     if not os.path.isabs(resolved):
         resolved = os.path.join(workspace_dir, resolved)
-    abs_path = os.path.abspath(resolved)
+    abs_path = os.path.realpath(resolved)
     if not _is_subpath(abs_path, workspace_dir):
         return None
     return abs_path
@@ -186,13 +186,19 @@ def run_command(
     workspace_dir: str,
     cwd: Optional[str] = None,
     timeout_secs: Optional[int] = None,
+    allowed_commands: Optional[List[str]] = None,
+    dangerous_flags: Optional[List[str]] = None,
 ) -> str:
     """
-    Execute a shell command with safety checks and configurable timeout/cwd.
+    Execute a command with safety checks and configurable timeout/cwd.
+
+    The command is parsed into an argument vector and executed WITHOUT a shell
+    (``shell=False``). This prevents shell metacharacters (``;``, ``&&``, ``|``,
+    backticks, ``$()``, redirections) from chaining additional commands past the
+    allowlist check. The first token must be in ``allowed_commands``.
     """
-    for flag in DANGEROUS_FLAGS:
-        if flag in command:
-            return f"Error: Command contains forbidden flag '{flag}'."
+    allowed = list(allowed_commands) if allowed_commands is not None else ALLOWED_COMMANDS
+    flags = list(dangerous_flags) if dangerous_flags is not None else DANGEROUS_FLAGS
 
     try:
         cmd_parts = shlex.split(command)
@@ -202,9 +208,13 @@ def run_command(
     if not cmd_parts:
         return "Error: Empty command."
 
-    base_cmd = cmd_parts[0]
-    if base_cmd not in ALLOWED_COMMANDS:
-        return f"Error: Command '{base_cmd}' is not in the allowed list: {ALLOWED_COMMANDS}"
+    base_cmd = os.path.basename(cmd_parts[0])
+    if base_cmd not in allowed:
+        return f"Error: Command '{base_cmd}' is not in the allowed list: {allowed}"
+
+    for flag in flags:
+        if any(flag in token for token in cmd_parts):
+            return f"Error: Command contains forbidden flag '{flag}'."
 
     command_cwd, cwd_error = _resolve_cwd(cwd, workspace_dir)
     if cwd_error:
@@ -216,8 +226,8 @@ def run_command(
 
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            cmd_parts,
+            shell=False,
             cwd=command_cwd,
             capture_output=True,
             text=True,
@@ -225,6 +235,11 @@ def run_command(
         )
         output = (result.stdout or "") + ("\n" if result.stdout and result.stderr else "") + (result.stderr or "")
         output = output.strip()
+        if result.returncode != 0:
+            # Surface the exit code so callers (e.g. the validation engine) can
+            # distinguish success from failure even when output looks benign.
+            header = f"[Exit code {result.returncode}]"
+            return f"{header}\n{output}" if output else header
         if output:
             return output
         return "Success (No output)"
