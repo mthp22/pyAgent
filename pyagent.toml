@@ -1,0 +1,39 @@
+[agent]
+model = "gemma4:latest"
+max_iterations = 50
+approval_mode = "ask" # options: "safe", "ask", "auto"
+workspace = "."
+
+[llm]
+provider = "ollama"
+endpoint = "http://localhost:11434"
+timeout = 120
+
+[context]
+max_tokens = 12000
+history_limit = 30
+auto_compact = true
+
+[safety]
+allow_network = false
+allow_package_install = false
+allow_git_push = false
+allowed_commands = [
+    "python",
+    "python3",
+    "pip",
+    "pip3",
+    "pytest",
+    "ls",
+    "cat",
+    "echo",
+    "mkdir",
+    "touch",
+    "git",
+    "source",
+    "cd",
+]
+dangerous_flags = ["-rf", "sudo"]
+
+[mcp]
+config = ".mcp/servers.json"

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyagent"
+version = "0.2.0"
+description = "Autonomous local coding helper and model-agnostic runtime"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "pyAgent Contributors" }
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["ruff>=0.5.0"]
+
+[project.scripts]
+pyagent = "agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent*", "servers*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
