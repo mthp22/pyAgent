@@ -1,54 +1,130 @@
-# pyAgent: Local AI Coding Agent
+# pyAgent — Autonomous Local Coding Helper & Runtime
 
-A Python-based autonomous coding agent that uses CodeLlama (via Ollama) to accept a natural language goal, plan steps, and iteratively execute commands/edit files.
+pyAgent is a free, local, open-source coding agent designed to help developers build, modify, debug, test, and maintain software using a locally hosted LLM (Ollama default, with pluggable providers).
 
-## Features
-- Local LLM via Ollama API
-- Goal-based planning and iterative execution
-- Tool calling via strict JSON schema (read_file, write_file, edit_file, run_command, finish)
-- Safe execution environment (restricts arbitrary paths, dangerous commands)
-- Deterministic session continuation with `current.md`, `next.md`, and `session.json`
-- Context management with persisted action history across runs
+> **Core Philosophy**: Generating code is not completion. Functional validation is completion. The agent never claims "Done" without automated test or execution evidence.
 
-## Setup Instructions
+---
 
-1. Ensure you have Python 3.10+ installed.
-2. Install [Ollama](https://ollama.com/) and download CodeLlama if you haven't already:
+## Key Features
+
+- **MCP-First Architecture**: Built around the Model Context Protocol (MCP). The live tool catalog discovered from every server is advertised to the model via native tool calling, with single-turn JSON actions as a fallback. Out of the box, zero-external-dependency servers are provided for:
+  - `filesystem`: workspace-confined atomic file read, write, targeted patch-editing, directory listing, and glob search.
+  - `git`: working tree inspection, diffs, log history, branch management, and atomic commits.
+  - `terminal`: sandboxed command runner with strict allowlists and dangerous flag filters (`-rf`, `sudo`).
+- **Repository Profiling & Intelligence**: Automatically identifies languages (Python, TypeScript/JavaScript, Rust, Go), test runners (`pytest`, `vitest`, `cargo test`), linters, build systems, and active Git state before writing code.
+- **Living Planner**: Dynamic, model-driven replanning. When tests fail or unexpected blockers arise, the agent diagnoses errors, injects targeted fix steps, and heals without manual intervention.
+- **Autonomous Validation Engine**: Discovers and runs project tests and builds. Classifies failures (own changes vs. missing dependencies vs. environment) and feeds diagnostics back into the loop.
+- **3-Tier Permission & Safety Model**:
+  - `safe`: Read-only inspections only; mutations are blocked.
+  - `ask`: Mutating tools prompt for confirmation.
+  - `auto`: Fully autonomous execution confined to the project workspace.
+- **Hardened Command Execution**: the `terminal` tool parses commands into an argument vector and runs them **without a shell**, so metacharacters (`;`, `&&`, `|`, backticks, `$()`, redirections) cannot chain commands past the allowlist. The first token must appear in `[safety].allowed_commands`, and `dangerous_flags` are rejected. The effective policy from `pyagent.toml` is propagated to the sandboxed MCP servers so both execution paths enforce identical rules.
+- **Symlink-safe Workspace Confinement**: file paths are resolved with `realpath`, so a symlink inside the workspace cannot be used to read or write outside it.
+- **Context Engine & Structured Persistence**:
+  - Sliding context window budgeting with tool output compaction and artifact archiving.
+  - Append-only event streaming in `history.jsonl`, living plans in `plan.json`, deterministic state snapshots in `current.md` & `next.md`, and uncompressed execution outputs in `artifacts/`.
+
+---
+
+## Installation & Setup
+
+1. **Prerequisites**: Python 3.11+ and [Ollama](https://ollama.com/) running locally.
+2. **Pull your preferred model**:
    ```bash
-   ollama run codellama
+   ollama run gemma4:latest
+   # or
+   ollama run qwen2.5-coder:7b
    ```
-   (Wait for it to download and run, then you can exit or leave the process running in the background depending on your OS).
-   
-3. Install Python dependencies:
+3. **Install pyAgent**:
    ```bash
-   pip install -r requirements.txt
+   pip install -e .
    ```
 
-## How to Run
+---
 
-Pass your goal as a quoted string to `main.py`:
+## Configuration (`pyagent.toml`)
 
-```bash
-python main.py "Create a Flask app with a /hello endpoint"
+All runtime settings can be managed via `pyagent.toml`:
+
+```toml
+[agent]
+model = "gemma4:latest"
+max_iterations = 50
+approval_mode = "ask" # "safe" | "ask" | "auto"
+workspace = "."
+
+[llm]
+provider = "ollama"
+endpoint = "http://localhost:11434"
+timeout = 120
+
+[context]
+max_tokens = 12000
+history_limit = 30
+auto_compact = true
+
+[safety]
+allow_network = false
+allow_package_install = false
+allow_git_push = false
+allowed_commands = ["python", "python3", "pytest", "git", "ls", "cat", "echo", "npm", "cargo"]
+dangerous_flags = ["-rf", "sudo"]
+
+[mcp]
+config = ".mcp/servers.json"
 ```
 
-Continue previous chat sessions with **-start**
+---
 
+## CLI Usage
+
+Run tasks directly:
 ```bash
-python main.py -start
+pyagent "Add endpoint /health to the FastAPI app and write tests"
 ```
 
-The agent will textually explain its planned steps and its exact JSON-based actions it is taking.
-All actions/history are saved automatically in `Chats/`.
+Interactive assistant mode:
+```bash
+pyagent
+```
 
-Each chat workspace includes:
-- `plan.md`: active implementation plan
-- `current.md`: deterministic progress snapshot
-- `next.md`: deterministic immediate next steps
-- `session.json`: session metadata (goal, status, iteration/error context)
+Inspect discovered MCP tools:
+```bash
+pyagent --tools
+```
 
-### Configuration
-You can edit `agent/config.py` or use environment variables:
-- `LLM_ENDPOINT`: Set if your Ollama endpoint differs from `http://localhost:11434/api/generate`
-- `MODEL_NAME`: Default is `qwen2.5-coder:7b`.
-- `WORKSPACE_DIR`: Default is your current working directory. The agent is locked to this directory.
+Test MCP server connectivity:
+```bash
+pyagent --mcp
+```
+
+Check session statuses:
+```bash
+pyagent --status
+```
+
+Resume a previous session:
+```bash
+pyagent --resume [session_id]
+```
+
+Run in dry-run / safe mode (no mutations):
+```bash
+pyagent --dry-run "Investigate why the test suite is failing"
+```
+
+Override approval mode:
+```bash
+pyagent --approval auto "Refactor utils.py"
+```
+
+---
+
+## Running Tests
+
+pyAgent comes with a full test suite covering all modules:
+
+```bash
+python -m unittest discover tests
+```
