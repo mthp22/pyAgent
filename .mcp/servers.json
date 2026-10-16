@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "filesystem": {
+      "command": "python3",
+      "args": ["servers/filesystem.py"]
+    },
+    "git": {
+      "command": "python3",
+      "args": ["servers/git.py"]
+    },
+    "terminal": {
+      "command": "python3",
+      "args": ["servers/terminal.py"]
+    }
+  }
+}
